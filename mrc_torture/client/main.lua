@@ -85,8 +85,18 @@ local function requestModel(model)
 end
 
 local function loadAnimDict(dict)
+    if type(dict) == 'table' then
+        for _, entry in ipairs(dict) do
+            local loaded = loadAnimDict(entry)
+            if loaded then
+                return loaded
+            end
+        end
+        return nil
+    end
+
     if HasAnimDictLoaded(dict) then
-        return true
+        return dict
     end
 
     RequestAnimDict(dict)
@@ -99,7 +109,31 @@ local function loadAnimDict(dict)
         end
     end
 
-    return HasAnimDictLoaded(dict)
+    if HasAnimDictLoaded(dict) then
+        return dict
+    end
+
+    return nil
+end
+
+local function resolveAnimation(animData)
+    if not animData then return end
+
+    if animData.variants then
+        for _, variant in ipairs(animData.variants) do
+            local dict = loadAnimDict(variant.dict)
+            if dict then
+                return dict, variant.clip, variant.flag, variant.duration
+            end
+        end
+    else
+        local dict = loadAnimDict(animData.dict)
+        if dict then
+            return dict, animData.clip, animData.flag, animData.duration
+        end
+    end
+
+    return nil
 end
 
 local function clearToolProp()
@@ -112,16 +146,83 @@ end
 local function detachVictim()
     local ped = PlayerPedId()
     FreezeEntityPosition(ped, false)
+    DetachEntity(ped, true, true)
     ClearPedTasks(ped)
     ClearPedSecondaryTask(ped)
-    DetachEntity(ped, true, true)
+    SetEntityCollision(ped, true, true)
+    SetPedCanRagdoll(ped, true)
 end
 
-local function playBaseVictimAnim()
+local function playBaseVictimAnim(spotId)
     local ped = PlayerPedId()
-    if loadAnimDict(Config.BaseVictimAnim.dict) then
-        TaskPlayAnim(ped, Config.BaseVictimAnim.dict, Config.BaseVictimAnim.clip, 8.0, -8.0, -1, Config.BaseVictimAnim.flag or 1, 0.0, false, false, false)
+    local data = Config.TortureSpots[spotId]
+    local base = Config.BaseVictimAnim
+
+    if not data or not base then return end
+
+    local chair = ChairEntities[spotId]
+    if not chair or not DoesEntityExist(chair) then return end
+
+    local dict, clip, flag, animDuration = resolveAnimation(base)
+    if not dict then
+        local references = {}
+        if base.variants then
+            for _, variant in ipairs(base.variants) do
+                references[#references+1] = tostring(variant.dict)
+            end
+        else
+            local baseDict = base.dict
+            if type(baseDict) == 'table' then
+                for _, entry in ipairs(baseDict) do
+                    references[#references+1] = tostring(entry)
+                end
+            else
+                references[#references+1] = tostring(base.dict)
+            end
+        end
+        print(('[mrc_torture] No se pudo cargar ninguna animación base (%s)'):format(table.concat(references, ', ')))
+        return
     end
+
+    if not clip then
+        print('[mrc_torture] La animación base no tiene clip válido configurado.')
+        return
+    end
+
+    local offset = data.victimOffset or vec3(0.0, 0.0, 0.0)
+    local rotation = data.victimRotation or vec3(0.0, 0.0, 0.0)
+    local worldPos = GetOffsetFromEntityInWorldCoords(chair, offset)
+    local heading = (data.heading or GetEntityHeading(chair)) + (rotation.z or 0.0)
+
+    DetachEntity(ped, true, true)
+    FreezeEntityPosition(ped, false)
+    SetEntityCoordsNoOffset(ped, worldPos.x, worldPos.y, worldPos.z, false, false, false)
+    SetEntityHeading(ped, heading)
+
+    TaskPlayAnimAdvanced(
+        ped,
+        dict,
+        clip,
+        worldPos.x,
+        worldPos.y,
+        worldPos.z,
+        rotation.x or 0.0,
+        rotation.y or 0.0,
+        heading,
+        base.blendIn or 8.0,
+        base.blendOut or -8.0,
+        animDuration or base.duration or -1,
+        flag or base.flag or 33,
+        0.0,
+        false,
+        false,
+        false
+    )
+
+    AttachEntityToEntity(ped, chair, data.victimBone or 0, offset.x, offset.y, offset.z, rotation.x, rotation.y, rotation.z, false, false, false, false, 2, true)
+    SetPedCanRagdoll(ped, false)
+    SetEntityCollision(ped, false, false)
+    FreezeEntityPosition(ped, true)
 end
 
 local function disableControlsThread()
@@ -422,13 +523,25 @@ local function attachVictimToChair(spotId)
 
     local ped = PlayerPedId()
     local offset = data.victimOffset or vec3(0.0, 0.0, 0.0)
-    local rotation = data.victimRotation or vec3(0.0, 0.0, 0.0)
+    local worldPos = GetOffsetFromEntityInWorldCoords(chair, offset)
 
-    SetEntityCoords(ped, data.coords.x, data.coords.y, data.coords.z, false, false, false, true)
-    SetEntityHeading(ped, data.heading or 0.0)
-    AttachEntityToEntity(ped, chair, 0, offset.x, offset.y, offset.z, rotation.x, rotation.y, rotation.z, false, false, false, false, 2, true)
-    FreezeEntityPosition(ped, true)
-    playBaseVictimAnim()
+    ClearPedTasksImmediately(ped)
+    FreezeEntityPosition(ped, false)
+    SetEntityCoordsNoOffset(ped, worldPos.x, worldPos.y, worldPos.z, false, false, false)
+    SetEntityHeading(ped, data.heading or GetEntityHeading(chair))
+    SetPedCanRagdoll(ped, false)
+    SetEntityCollision(ped, false, false)
+
+    playBaseVictimAnim(spotId)
+
+    if Config.BaseVictimAnim and Config.BaseVictimAnim.reapplyDelay then
+        CreateThread(function()
+            Wait(Config.BaseVictimAnim.reapplyDelay)
+            if ActiveScene and ActiveScene.role == 'victim' and ActiveScene.spotId == spotId then
+                playBaseVictimAnim(spotId)
+            end
+        end)
+    end
 end
 
 local function positionTorturer(spotId)
@@ -439,17 +552,55 @@ local function positionTorturer(spotId)
 
     local position = vector3(data.coords.x + offset.x, data.coords.y + offset.y, data.coords.z + offset.z)
     SetEntityCoords(ped, position.x, position.y, position.z, false, false, false, true)
-    SetEntityHeading(ped, (data.heading or 0.0) + 180.0)
+    SetEntityHeading(ped, (data.heading or 0.0) + (data.torturerHeading or 180.0))
     ClearPedTasksImmediately(ped)
 end
 
 local function playVictimReaction(tool)
-    if not tool or not tool.victimAnim then return end
-    local ped = PlayerPedId()
-    local anim = tool.victimAnim
+    if not tool then return end
 
-    if loadAnimDict(anim.dict) then
-        TaskPlayAnim(ped, anim.dict, anim.clip, 8.0, -8.0, anim.duration or tool.duration or 4000, anim.flag or 49, 0.0, false, false, false)
+    if tool.victimAnim then
+        local ped = PlayerPedId()
+        local anim = tool.victimAnim
+        local length = anim.duration or tool.duration or 4000
+
+        local dict, clip, variantFlag, variantDuration = resolveAnimation(anim)
+        if dict then
+            if not clip then
+                print('[mrc_torture] Falta el clip configurado para la animación de la víctima.')
+                return
+            end
+            length = anim.duration or variantDuration or tool.duration or 4000
+            TaskPlayAnim(ped, dict, clip, 8.0, -8.0, length, variantFlag or anim.flag or 49, 0.0, false, false, false)
+        else
+            local references = {}
+            if anim.variants then
+                for _, variant in ipairs(anim.variants) do
+                    references[#references+1] = tostring(variant.dict)
+                end
+            else
+                local animDict = anim.dict
+                if type(animDict) == 'table' then
+                    for _, entry in ipairs(animDict) do
+                        references[#references+1] = tostring(entry)
+                    end
+                else
+                    references[#references+1] = tostring(anim.dict)
+                end
+            end
+            print(('[mrc_torture] No se pudo cargar el diccionario de animación de la víctima (%s)'):format(table.concat(references, ', ')))
+        end
+
+        if ActiveScene and ActiveScene.role == 'victim' then
+            CreateThread(function()
+                Wait(length)
+                if ActiveScene and ActiveScene.role == 'victim' then
+                    playBaseVictimAnim(ActiveScene.spotId)
+                end
+            end)
+        end
+    elseif ActiveScene and ActiveScene.role == 'victim' then
+        playBaseVictimAnim(ActiveScene.spotId)
     end
 end
 
@@ -458,8 +609,30 @@ local function playTorturerAnim(tool)
     local ped = PlayerPedId()
     local anim = tool.anim
 
-    if loadAnimDict(anim.dict) then
-        TaskPlayAnim(ped, anim.dict, anim.clip, 8.0, -8.0, tool.duration or -1, anim.flag or 49, 0.0, false, false, false)
+    local dict, clip, variantFlag, variantDuration = resolveAnimation(anim)
+    if dict then
+        if not clip then
+            print('[mrc_torture] Falta el clip configurado para la animación del torturador.')
+            return
+        end
+        TaskPlayAnim(ped, dict, clip, 8.0, -8.0, tool.duration or variantDuration or -1, variantFlag or anim.flag or 49, 0.0, false, false, false)
+    else
+        local references = {}
+        if anim.variants then
+            for _, variant in ipairs(anim.variants) do
+                references[#references+1] = tostring(variant.dict)
+            end
+        else
+            local animDict = anim.dict
+            if type(animDict) == 'table' then
+                for _, entry in ipairs(animDict) do
+                    references[#references+1] = tostring(entry)
+                end
+            else
+                references[#references+1] = tostring(anim.dict)
+            end
+        end
+        print(('[mrc_torture] No se pudo cargar el diccionario de animación del torturador (%s)'):format(table.concat(references, ', ')))
     end
 end
 

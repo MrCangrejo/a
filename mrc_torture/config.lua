@@ -32,15 +32,29 @@ Config.DefaultBlip = {
     name = 'Sala de interrogatorio'
 }
 
---\n-- PUNTOS DE TORTURA\n-- Para añadir nuevos puntos, copia la estructura de la tabla y cambia las coordenadas/modelos.\n-- coords: vector3 de la silla.\n-- heading: rotación principal de la silla.\n-- chairProp: modelo de la silla a spawn.\n-- victimOffset: ajuste de posición de la víctima respecto al centro de la silla.\n-- torturerOffset: posición relativa donde se coloca el torturador.\n-- victimRotation: rotación adicional para la víctima (útil cuando el prop no está alineado).\n-- scenario: texto descriptivo para identificar el interior/escena.\n-- blip: configuración individual del punto (si se omite, usa Config.DefaultBlip).\n--\nConfig.TortureSpots = {
+--
+-- PUNTOS DE TORTURA
+-- Para añadir nuevos puntos, copia la estructura de la tabla y cambia las coordenadas/modelos.
+-- coords: vector3 de la silla.
+-- heading: rotación principal de la silla.
+-- chairProp: modelo de la silla a spawn.
+-- victimOffset: ajuste de posición de la víctima respecto al centro de la silla.
+-- torturerOffset: posición relativa donde se coloca el torturador.
+-- victimRotation: rotación adicional para la víctima (útil cuando el prop no está alineado).
+-- torturerHeading: ajuste extra para orientar al torturador (por defecto mira a la víctima).
+-- scenario: texto descriptivo para identificar el interior/escena.
+-- blip: configuración individual del punto (si se omite, usa Config.DefaultBlip).
+--
+Config.TortureSpots = {
     {
         label = 'Almacén abandonado',
         coords = vec3(963.34, -122.16, 74.35),
         heading = 180.0,
         chairProp = 'prop_torture_chair',
-        victimOffset = vec3(0.0, 0.0, 0.0),
+        victimOffset = vec3(0.0, 0.0, 0.42),
         victimRotation = vec3(0.0, 0.0, 180.0),
-        torturerOffset = vec3(0.0, -1.2, 0.0),
+        torturerOffset = vec3(0.0, -1.25, 0.0),
+        torturerHeading = 180.0,
         scenario = 'Hangar industrial',
         blip = {
             enabled = true,
@@ -52,14 +66,36 @@ Config.DefaultBlip = {
     }
 }
 
---\n-- HERRAMIENTAS DE TORTURA\n-- Copia cualquier entrada y cámbiala para crear nuevas herramientas.\n-- name: identificador único (clave de la tabla).\n-- label: texto que se mostrará al torturador.\n-- duration: duración total de la animación (ms).\n-- anim: animación del torturador (dict, clip y flag).\n-- victimAnim: animación de reacción de la víctima (dict, clip, flag, duration opcional).\n-- prop: modelo opcional que se adjuntará a la mano del torturador (bone y offsets).\n-- effects: tabla de efectos aplicados a la víctima (daño, estrés, pantalla, cámara, etc.).\n-- sound: sonido opcional que se reproducirá para ambos jugadores.\n--\nConfig.Tools = {
+--
+-- HERRAMIENTAS DE TORTURA
+-- Copia cualquier entrada y cámbiala para crear nuevas herramientas.
+-- name: identificador único (clave de la tabla).
+-- label: texto que se mostrará al torturador.
+-- duration: duración total de la animación (ms).
+-- anim: animación del torturador (dict, clip y flag). Acepta `variants` para definir varias opciones.
+-- victimAnim: animación de reacción de la víctima (dict, clip, flag, duration opcional). También admite `variants`.
+-- prop: modelo opcional que se adjuntará a la mano del torturador (bone y offsets).
+-- effects: tabla de efectos aplicados a la víctima (daño, estrés, pantalla, cámara, etc.).
+-- sound: sonido opcional que se reproducirá para ambos jugadores.
+--
+Config.Tools = {
     alicates = {
         label = 'Alicates',
-        duration = 6000,
+        duration = 7000,
         icon = 'fa-solid fa-screwdriver-wrench',
-        anim = { dict = 'anim@heists@humane_labs@finale@keycards@heistkeycard@', clip = 'exit_loop', flag = 49 },
-        victimAnim = { dict = 'anim@heists@ornate_bank@hostages@ped_c@', clip = 'flinch_loop', flag = 49, duration = 3500 },
-        prop = { model = 'prop_tool_screwdvr01', bone = 60309, pos = vec3(0.05, 0.02, -0.02), rot = vec3(90.0, 0.0, 90.0) },
+        anim = {
+            variants = {
+                { dict = 'missfbi3_torture', clip = 't_pliers_loop', flag = 49, duration = 7000 },
+                { dict = 'anim@heists@humane_labs@finale@keycards@heistkeycard@', clip = 'exit_loop', flag = 49, duration = 6000 }
+            }
+        },
+        victimAnim = {
+            variants = {
+                { dict = 'missfbi3_torture', clip = 'victim_pliers_loop', flag = 33, duration = 6500 },
+                { dict = 'anim@heists@ornate_bank@hostages@ped_c@', clip = 'flinch_loop', flag = 33, duration = 3500 }
+            }
+        },
+        prop = { model = 'prop_tool_screwdvr01', bone = 60309, pos = vec3(0.05, 0.01, -0.01), rot = vec3(90.0, 0.0, 110.0) },
         effects = {
             health = { amount = 12, canKill = false },
             stress = { amount = 15 },
@@ -70,11 +106,21 @@ Config.DefaultBlip = {
     },
     porra = {
         label = 'Porra eléctrica',
-        duration = 5000,
+        duration = 6000,
         icon = 'fa-solid fa-bolt',
-        anim = { dict = 'anim@mp_player_intmenu@key_fob@', clip = 'fob_click', flag = 49 },
-        victimAnim = { dict = 'random@arrests', clip = 'generic_radio_chatter', flag = 49, duration = 2500 },
-        prop = { model = 'w_pi_stungun', bone = 57005, pos = vec3(0.12, 0.02, -0.02), rot = vec3(0.0, 90.0, 0.0) },
+        anim = {
+            variants = {
+                { dict = 'missfbi3_torture', clip = 't_light_loop', flag = 49, duration = 6000 },
+                { dict = 'anim@mp_player_intmenu@key_fob@', clip = 'fob_click', flag = 49, duration = 4000 }
+            }
+        },
+        victimAnim = {
+            variants = {
+                { dict = 'missfbi3_torture', clip = 'victim_light_loop', flag = 33, duration = 5500 },
+                { dict = 'random@arrests', clip = 'generic_radio_chatter', flag = 33, duration = 3000 }
+            }
+        },
+        prop = { model = 'w_pi_stungun', bone = 57005, pos = vec3(0.1, 0.02, -0.03), rot = vec3(-10.0, 90.0, 0.0) },
         effects = {
             health = { amount = 8, canKill = false },
             screen = { effect = 'Dont_tazeme_bro', duration = 4000 },
@@ -84,10 +130,20 @@ Config.DefaultBlip = {
     },
     llave = {
         label = 'Llave inglesa',
-        duration = 5500,
+        duration = 6200,
         icon = 'fa-solid fa-hammer',
-        anim = { dict = 'melee@hatchet@streamed_core', clip = 'plyr_front_takedown', flag = 48 },
-        victimAnim = { dict = 'anim@heists@ornate_bank@hostages@ped_m@', clip = 'flinch_loop', flag = 49, duration = 4000 },
+        anim = {
+            variants = {
+                { dict = 'missfbi3_torture', clip = 't_wrench_loop', flag = 48, duration = 6200 },
+                { dict = 'melee@hatchet@streamed_core', clip = 'plyr_front_takedown', flag = 48, duration = 4800 }
+            }
+        },
+        victimAnim = {
+            variants = {
+                { dict = 'missfbi3_torture', clip = 'victim_wrench_loop', flag = 33, duration = 5200 },
+                { dict = 'anim@heists@ornate_bank@hostages@ped_m@', clip = 'flinch_loop', flag = 33, duration = 4000 }
+            }
+        },
         prop = { model = 'prop_cs_wrench', bone = 60309, pos = vec3(0.1, 0.0, 0.0), rot = vec3(0.0, 90.0, 0.0) },
         effects = {
             health = { amount = 18, canKill = false },
@@ -127,7 +183,22 @@ Config.DefaultBlip = {
     same_target = 'No puedes torturarte a ti mismo.'
 }
 
---\n-- Animaciones base para la víctima mientras está atada.\n--\nConfig.BaseVictimAnim = { dict = 'anim@amb@business@weed@weed_inspecting_lo_med_hi@', clip = 'weed_spraybottle_crouch_spraying_02_inspector', flag = 1 }
+--
+-- Animaciones base para la víctima mientras está atada.
+-- Puedes añadir variantes adicionales en la clave `variants` si quieres probar otros dict/clip.
+--
+Config.BaseVictimAnim = {
+    variants = {
+        { dict = 'missfbi3_torture', clip = 'victim_idle', flag = 33, duration = -1 },
+        { dict = 'missfbi3_torture', clip = 'victim_loop', flag = 33, duration = -1 },
+        { dict = 'anim@heists@ornate_bank@hostages@ped_c@', clip = 'flinch_loop', flag = 33, duration = -1 }
+    },
+    blendIn = 8.0,
+    blendOut = -8.0,
+    duration = -1,
+    flag = 33,
+    reapplyDelay = 800
+}
 
 -- Ajustes visuales adicionales.
 Config.ScreenFadeDuration = 1000 -- ms para el fade al liberar.
